@@ -1,1 +1,11 @@
 README
+
+USAGE
+
+  In ~/.bashrc:
+
+  if [ -d ~/rc ]; then
+    for i in ~/rc/.*rc; do
+      [ -x $i ] && . $i
+    done
+  fi
