@@ -1,0 +1,2 @@
+function j { if [[ $1 =~ ^/ ]]; then file="$1"; else file="/$1"; fi; shift; echo -e '\e]2;'$F_ROOT$file'\007\e]1;\007'; ${EDITOR:-joe} $F_ROOT$file $@; }
+_j() { mapfile -t COMPREPLY < <(find ${J_ROOT:-.} -type f -printf "%T@ %Tc %p\n" | sort -rn | head -10 | cut -b56- | grep "${COMP_WORDS[COMP_CWORD]}"); }; complete -F _j -f j
