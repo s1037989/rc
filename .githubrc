@@ -53,7 +53,7 @@ function commit-all {
         trap '' INT
         pushd $(cat $i) >/dev/null 2>&1
         git status
-        echo "Commit Message:"; read commit
+        echo -n "Commit Message:"; read commit
         git commit -am "${commit:-quick commit}"
         mkdir -p /tmp/github/spool/push
         echo $(git rev-parse --show-toplevel) > /tmp/github/spool/push/$(basename $(git rev-parse --show-toplevel))
