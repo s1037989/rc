@@ -55,6 +55,8 @@ function commit-all {
         git status
         echo "Commit Message:"; read commit
         git commit -am "${commit:-quick commit}"
+        mkdir -p /tmp/github/spool/push
+        echo $(git rev-parse --show-toplevel) > /tmp/github/spool/push/$(basename $(git rev-parse --show-toplevel))
         popd >/dev/null 2>&1
         rm -f $i
         trap - INT
