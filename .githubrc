@@ -1,3 +1,86 @@
-function j { ${EDITOR:-joe} "$1" ; pushd $(dirname "$1") ; pushd $(git rev-parse --show-toplevel); echo -n "Commit? [Y/n] "; read -n1 yn; if [ "$yn" = "Y" -o "$yn" = "y" -o -z "$yn" ]; then echo -n "Commit Message: "; read commit; git commit -am "${commit:-quick commit}"; mkdir -p /tmp/github/spool/push; echo -n $(git rev-parse --show-toplevel) > /tmp/github/spool/push/$(basename $(git rev-parse --show-toplevel)); else mkdir -p /tmp/github/spool/commit; echo -n $(git rev-parse --show-toplevel) > /tmp/github/spool/commit/$(basename $(git rev-parse --show-toplevel)); fi; popd; popd; }
-function commit-all { for i in /tmp/github/spool/commit/*; do pushd $(cat $i); git status; echo "Commit Message:"; read commit; git commit -am "${commit:-quick commit}"; rm -f $i; done; }
-function push-all { for i in /tmp/github/spool/push/*; do pushd $(cat $i); git status; git push -u origin master; rm -f $i; done; }
+function j {
+  file="$1"
+  shift
+  echo -e '\e]2;'$file'\007\e]1;\007'
+  ${EDITOR:-joe} "$file" "$@"
+  pushd $(dirname "$file") >/dev/null 2>&1
+  if git rev-parse --show-toplevel >/dev/null 2>&1; then
+    trap '' INT
+    pushd $(git rev-parse --show-toplevel) >/dev/null 2>&1
+    echo -n "Commit? [Y/n] " ; read -n1 yn
+    if [ "$yn" = "Y" -o "$yn" = "y" -o -z "$yn" ]; then
+      echo -n "Commit Message: " ; read commit
+      git commit -am "${commit:-quick commit}"
+      mkdir -p /tmp/github/spool/push
+      echo $(git rev-parse --show-toplevel) > /tmp/github/spool/push/$(basename $(git rev-parse --show-toplevel))
+    else
+      echo
+      mkdir -p /tmp/github/spool/commit
+      echo $(git rev-parse --show-toplevel) > /tmp/github/spool/commit/$(basename $(git rev-parse --show-toplevel))
+    fi
+    popd >/dev/null 2>&1
+    trap - INT
+  fi
+  popd >/dev/null 2>&1
+  if [[ $file =~ rc$ ]]; then
+    if [ -x "$file" ]; then
+      . "$file" ; echo "Sourced $file"
+    fi
+  fi
+}
+_j() {
+  #if git rev-parse --show-toplevel >/dev/null 2>&1; then
+    input="${COMP_WORDS[COMP_CWORD]}"
+    mapfile -t COMPREPLY < <(find $PWD -name ".*" -prune -o -type f -printf "%T@ %p\n" | sort -rn | head -10 | cut -b23- | grep "${input##$PWD/}");
+    c=0
+    for i in "${COMPREPLY[@]}"; do
+      c=$((c+1))
+      file=$(file -b $i)
+      if [ "$file" != "ASCII text" ]; then unset COMPREPLY[$c]; c=$((c-1)); fi
+    done
+    #mapfile -t COMPREPLY < <(tail -500 /tmp/j | uniq | sort -rn | head -10 | grep "${COMP_WORDS[COMP_CWORD]}");
+  #fi
+};
+complete -F _j -o default j
+
+function commit-all {
+  if [ "$1" = "-" ]; then debug=1; else debug=0; fi
+  if [ `find /tmp/github/spool/commit -prune -empty` ]; then
+    echo "No repos to push"
+  else
+    for i in /tmp/github/spool/commit/*; do
+      if [ $debug -eq 0 ]; then
+        trap '' INT
+        pushd $(cat $i) >/dev/null 2>&1
+        git status
+        echo "Commit Message:"; read commit
+        git commit -am "${commit:-quick commit}"
+        popd >/dev/null 2>&1
+        rm -f $i
+        trap - INT
+      else
+        cat $i
+      fi
+    done
+  fi
+}
+function push-all {
+  if [ "$1" = "-" ]; then debug=1; else debug=0; fi
+  if [ `find /tmp/github/spool/push -prune -empty` ]; then
+    echo "No repos to push"
+  else
+    for i in /tmp/github/spool/push/*; do
+      if [ $debug -eq 0 ]; then
+        trap '' INT
+        pushd $(cat $i) >/dev/null 2>&1
+        git status
+        git push -u origin master
+        popd >/dev/null 2>&1
+        rm -f $i
+        trap - INT
+      else
+        cat $i
+      fi
+    done
+  fi
+}
