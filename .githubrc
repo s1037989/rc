@@ -12,7 +12,8 @@ function j {
     echo -n "Commit? [Y/n] " ; read -n1 yn ; echo
     if [ "$yn" = "Y" -o "$yn" = "y" -o -z "$yn" ]; then
       echo -n "Commit Message: " ; read commit
-      git commit -am "${commit:-quick commit}"
+      git add "$file"
+      git commit -m "${commit:-quick commit}"
       mkdir -p /tmp/github/spool/push
       echo $(git rev-parse --show-toplevel) > /tmp/github/spool/push/$(basename $(git rev-parse --show-toplevel))
     else
@@ -54,7 +55,7 @@ function commit-all {
         trap '' INT
         pushd $(cat $i) >/dev/null 2>&1
         git status
-        echo -n "Commit Message:"; read commit; echo
+        echo -n "Commit Message: "; read commit; echo
         git commit -am "${commit:-quick commit}"
         mkdir -p /tmp/github/spool/push
         echo $(git rev-parse --show-toplevel) > /tmp/github/spool/push/$(basename $(git rev-parse --show-toplevel))
