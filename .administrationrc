@@ -1,0 +1,89 @@
+function first_available { sort -n | uniq | perl -e 'my @uids = <STDIN>; my $nextuid = $ARGV[0] || $uids[0]; foreach my $uid ( sort { $a <=> $b } @uids ) { next if $uid <= $nextuid; last if $uid != ++$nextuid; } print $nextuid' "$1"; }
+function resetuser {
+	[ -z "$1" ] && {
+		echo Usage: $FUNCNAME uid '[uid...]';
+		return 1
+	};
+	until [ -z "$1" ]; do
+		if [ -f ~/.ldaprc -a -n "$NEWUID" ]; then
+			echo -n Resetting uidNumber: 
+			fa=$(/usr/bin/ldapsearch -LLL -x -w$(grep -i ^BINDPW ~/.ldaprc | sed 's/bindpw\s\+//i') 'uidNumber=*' uidNumber | ldif2csv uidNumber | first_available 1000)
+			echo $fa
+			echo -e $(/usr/bin/ldapsearch -LLL -x uid=$1 dn)"\nreplace: uidNumber\nuidNumber: $fa" | /usr/bin/ldapmodify -x -w$(grep -i ^BINDPW ~/.ldaprc | sed 's/bindpw\s\+//i')
+		fi
+		u=$(getent passwd $1 | cut -d : -f 3);
+		g=$(getent passwd $1 | cut -d : -f 4);
+		h=$(getent passwd $1 | cut -d : -f 6);
+		if [ $u -a $g -a $h ]; then
+			if [[ $h =~ ^/(data/users|home) ]]; then
+				/bin/echo $1 : $u : $g : $h;
+				/bin/mkdir -p $h;
+				#/bin/mkdir -p $h/Maildir;
+				/bin/chown -RLP $u.$g $h;
+				/bin/chmod 0701 $h;
+				if [ "$(getent group "$g" | cut -d: -f1)" == "staff" ]; then
+					/bin/mkdir -p $h/scanned;
+					/bin/chmod 2751 $h/scanned;
+				fi
+				#/bin/chmod 0700 $h/Maildir;
+				#/bin/mkdir -p $h/mail;
+				#/bin/chown $u.mail $h/mail;
+				#/bin/chmod 0770 $h/mail;
+				#/bin/touch $h/mail/mbox;
+				#/bin/chown $u.mail $h/mail/mbox;
+				#/bin/chmod 0660 $h/mail/mbox;
+			fi;
+		fi
+		shift || break
+	done
+}
+function maketiny { pushd /etc/tinydns/root; joe data; [ "$1" ] && touch data; make; popd 2>&1 >/dev/null; for i in tinydns dnscache; do [ -d /etc/service/$i ] && { svc -t /etc/service/$i; svstat /etc/service/$i;  }; done; }
+function diskuuid { echo See blkid; return; for i in $(find /dev/disk/by-uuid/ -type l); do j=$(basename $(readlink $i)); if [ "$1" == "$j" ]; then basename $i; fi; done; }
+function getnic {
+	if [ -z "$1" ]; then
+		echo -n "Usage: $FUNCNAME "; for i in /sys/class/net/*; do basename $i; done | paste -s -d '|';
+	else
+		driver=$(readlink -f /sys/class/net/$1/device/driver);
+		driver=${driver##*/};
+		echo $driver;
+	fi
+}
+function nomartians {
+	if [ -z "$1" ]; then
+		for i in /proc/sys/net/ipv4/conf/*; do
+			echo 0 > $i/log_martians
+		done
+	else
+		echo 0 > /proc/sys/net/ipv4/conf/$iface/log_martians
+	fi
+}
+function makepatch {
+	[ -z "$2" ] && { echo Usage: $FUNCNAME original new; return; }
+	echo Usage: $FUNCNAME original new
+	diff -urN $1 $2 > $2.patch
+	echo Patch saved as $2.patch
+}
+function ifconfig {
+	if [ $# -le 1 ]; then
+		for iface in $(/sbin/ifconfig $1 | awk '$0 ~ "^[^[:space:]]" { print $1}'); do
+			unset PORT
+			[ -r /etc/sysconfig/network-scripts/ifcfg-$iface ] && . /etc/sysconfig/network-scripts/ifcfg-$iface
+			if [ -L /sys/class/net/$iface/device ]; then
+				driver=$(readlink -f /sys/class/net/$iface/device/driver)
+				driver="${driver##*/}          "
+				driver=${driver:0:9}
+				port=${PORT:0:29}
+				zone=$(awk '/^[^#]/ && $2 == "'$iface'" { print $1 }' /etc/shorewall/interfaces)
+				if [ "${driver// /}" ]; then
+					/sbin/ifconfig $iface | sed -r "1i$driver Port:$port  Zone:$zone"
+				else
+					/sbin/ifconfig $iface
+				fi
+			else
+				/sbin/ifconfig $iface
+			fi
+		done
+	else
+		/sbin/ifconfig "$@"
+	fi
+}
